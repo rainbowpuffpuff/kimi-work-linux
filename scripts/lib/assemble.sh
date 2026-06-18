@@ -2,6 +2,30 @@
 # assemble.sh — assemble the runnable kimi-app/ from the staged pieces.
 # Sourced by install.sh (do not execute directly).
 
+# Convert an Apple .icns to a PNG (largest frame), via Pillow. Best-effort.
+_icns_to_png() {
+	local icns="$1" out="$2"
+	python3 - "$icns" "$out" <<'PY' || return 1
+import sys
+try:
+    from PIL import Image
+except Exception as e:
+    sys.stderr.write(f"Pillow unavailable: {e}\n"); sys.exit(1)
+icns, out = sys.argv[1], sys.argv[2]
+im = Image.open(icns)
+best = im.copy()
+for i in range(1, 64):
+    try:
+        im.seek(i)
+    except EOFError:
+        break
+    if im.size[0] >= best.size[0]:
+        best = im.copy()
+best.convert("RGBA").save(out)
+print(f"icns → {out} ({best.size[0]}x{best.size[1]})")
+PY
+}
+
 assemble_app() {
 	local dest="${1:-$KIMI_INSTALL_DIR}"
 	local asar="${2:-${REPACKED_ASAR:-$SCRIPT_DIR/app.asar}}"
@@ -42,10 +66,17 @@ assemble_app() {
 			rm -rf "$eresources/$name"
 			cp -r "$d" "$eresources/$name"
 		done
-		# icon(s) at the root of Resources/
-		for ic in icon.png icon.icns icon_windows.png; do
+		# icon(s) at the root of Resources/. Kimi Work ships icon.icns only
+		# (no PNG), so convert the icns → 1024px PNG for the Linux desktop
+		# entry / AppImage. Pillow (PIL) is required for this; if absent we
+		# fall back to any existing PNG, or skip with a warning.
+		for ic in icon.png icon_windows.png; do
 			[ -f "$resources/$ic" ] && cp "$resources/$ic" "$dest/$ic"
 		done
+		if [ ! -f "$dest/icon.png" ] && [ -f "$resources/icon.icns" ]; then
+			_icns_to_png "$resources/icon.icns" "$dest/icon.png" \
+				|| warn "could not convert icon.icns → PNG (install python3-pil?)"
+		fi
 	fi
 
 	info "kimi-app assembled → $dest"

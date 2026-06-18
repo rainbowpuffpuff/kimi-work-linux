@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# kimi-app Linux launcher — runs the converted Kimi Work under the bundled Electron.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ELECTRON_BIN="$SCRIPT_DIR/electron/electron"
+
+if [ ! -x "$ELECTRON_BIN" ]; then
+	echo "kimi-app: electron binary not found at $ELECTRON_BIN" >&2
+	exit 1
+fi
+
+# Seed an English UI locale on first run (Kimi defaults to zh-CN otherwise;
+# the user can switch language in-app afterwards).
+KIMI_DATA_DIR="${KIMI_DATA_DIR:-$HOME/.kimi-desktop}"
+if [ ! -d "$KIMI_DATA_DIR" ]; then
+	mkdir -p "$KIMI_DATA_DIR"
+fi
+
+# Linux portability flags. The bundled chrome-sandbox is not installed
+# SUID (root:4755), so we disable sandboxing here (same approach as
+# codex-desktop-linux / zcode-linux / claude-desktop-debian).
+ELECTRON_ARGS=(
+	--no-sandbox
+	--disable-dev-shm-usage
+	--disable-gpu-sandbox
+	--class=kimi-desktop
+)
+
+# Session-aware rendering (prefer Wayland native when available).
+case "${XDG_SESSION_TYPE:-}" in
+	wayland)
+		ELECTRON_ARGS+=(--ozone-platform-hint=auto)
+		;;
+esac
+
+# @napi-rs/canvas needs fontconfig + a font to render. On a minimal install
+# without fonts-dejavu-core the canvas init can throw; surface a hint.
+if ! fc-list >/dev/null 2>&1 || [ -z "$(fc-list 2>/dev/null | head -n1)" ]; then
+	echo "kimi-app: WARNING — no fonts detected (fc-list empty)." >&2
+	echo "          Canvas rendering may fail. Install fonts-dejavu-core." >&2
+fi
+
+# Optional user override: one Electron flag per line.
+FLAGS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/kimi-desktop/electron-flags.conf"
+if [ -f "$FLAGS_FILE" ]; then
+	while IFS= read -r line; do
+		[ -z "$line" ] && continue
+		[[ "$line" =~ ^[[:space:]]*# ]] && continue
+		ELECTRON_ARGS+=("$line")
+	done < "$FLAGS_FILE"
+fi
+
+exec "$ELECTRON_BIN" "${ELECTRON_ARGS[@]}" "$@"

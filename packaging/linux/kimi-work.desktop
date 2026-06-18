@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Kimi Work
+Name[zh_CN]=Kimi
+Comment=Kimi Work (unofficial Linux build)
+Comment[zh_CN]=Kimi 桌面客户端（非官方 Linux 移植版）
+Exec=/usr/bin/kimi-work %U
+Icon=kimi-work
+Categories=Office;Utility;
+Terminal=false
+StartupNotify=true
+StartupWMClass=kimi-desktop
