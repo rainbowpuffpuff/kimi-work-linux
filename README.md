@@ -116,8 +116,8 @@ make bootstrap            # deps → fetch latest DMG → build → package → 
 
 `make bootstrap` (a.k.a. `scripts/install-latest.sh`) detects the latest
 upstream version, skips the rebuild if you are already up to date, and
-installs the `.deb` (it will prompt for sudo). Pass `--force` to rebuild
-regardless: `make bootstrap -- --force`.
+installs the `.deb` (it will prompt for sudo). Pass `FORCE=1` to rebuild
+regardless: `make bootstrap FORCE=1`.
 
 Step by step:
 

@@ -58,7 +58,7 @@ run-app: ## Launch the generated kimi-app
 	@"$(APP_DIR)/start.sh"
 
 bootstrap: ## One-shot: install latest Kimi Work (deps → build → package → install)
-	@bash scripts/install-latest.sh $(if $(filter-out bootstrap,$(MAKECMDGOALS)),$(MAKECMDGOALS),)
+	@bash scripts/install-latest.sh $(if $(FORCE),--force,)
 
 clean: ## Remove generated app, work dirs and dist artifacts
 	@rm -rf "$(APP_DIR)" app-extracted dmg-extract "$(DIST_DIR)" work
