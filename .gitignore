@@ -1,0 +1,37 @@
+# ── upstream binaries & build artifacts (NEVER commit — redistribution-free policy) ──
+*.dmg
+*.exe
+Kimi.dmg
+Kimi.dmg.metadata
+kimi-app/
+app-extracted/
+dmg-extract/
+*.asar
+*.asar.unpacked/
+*.asar.ordering
+dist/
+work/
+build/
+*.AppImage
+*.deb
+*.rpm
+
+# ── bundled runtimes ──
+node-runtime/
+electron/
+resources/node-runtime/
+
+# ── caches ──
+.cache/
+*.zip
+
+# ── environment-dependent reports (generated per build) ──
+inspect-report.json
+patch-report.json
+build-info.json
+
+# ── editor / OS ──
+.vscode/
+.idea/
+*.swp
+.DS_Store
