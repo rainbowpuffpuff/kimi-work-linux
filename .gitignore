@@ -35,3 +35,4 @@ build-info.json
 .idea/
 *.swp
 .DS_Store
+index.js

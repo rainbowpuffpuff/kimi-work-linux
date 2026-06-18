@@ -51,6 +51,9 @@ strip_non_linux_natives() {
 	# esbuild darwin/win32 binaries (build-time only, not needed at runtime)
 	rm -rf "$dir/node_modules/@esbuild/darwin-"* 2>/dev/null || true
 	rm -rf "$dir/node_modules/@esbuild/win32-"* 2>/dev/null || true
+	# esbuild's own bin/ ships a darwin Mach-O that is only used at build time;
+	# drop it so no Mach-O remains in the runtime tree.
+	rm -f "$dir/node_modules/esbuild/bin/esbuild" 2>/dev/null || true
 
 	# @sentry/cli platform binaries (optional; the JS SDK works without them)
 	rm -rf "$dir/node_modules/@sentry/cli-darwin" \
