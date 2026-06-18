@@ -75,6 +75,8 @@ strip_non_linux_natives() {
 		rm -rf "$gw_nm/@lydell/node-pty-darwin-"* 2>/dev/null || true
 		rm -rf "$gw_nm/@img/sharp-darwin-"* 2>/dev/null || true
 		rm -rf "$gw_nm/sharp-darwin-"* 2>/dev/null || true
+		# sharp's libvips darwin sibling (superseded by the linux one)
+		rm -rf "$gw_nm/@img/sharp-libvips-darwin-"* 2>/dev/null || true
 		# sqlite-vec darwin sibling (superseded by sqlite-vec-linux-<arch>)
 		rm -rf "$gw_nm/sqlite-vec-darwin-"* 2>/dev/null || true
 		# node-pty spawn-helper is a conpty fallback helper (win/mac only);

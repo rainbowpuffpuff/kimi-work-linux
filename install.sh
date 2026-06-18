@@ -101,6 +101,7 @@ main() {
 	load_lib native-modules
 	load_lib electron
 	load_lib assemble
+	load_lib runtimes
 	load_lib patches
 	check_deps
 
@@ -142,6 +143,11 @@ main() {
 	# Stage: fetch + stage the matching Linux Electron runtime.
 	download_electron "$KIMI_INSTALL_DIR" "$(detect_arch)"
 	info "electron staged: ${ELECTRON_BIN:-<none>}"
+
+	# Stage: replace darwin-bundled daimon runtimes (Python, uv) + neutralize
+	# the darwin-only kimi-webbridge. Done on the APP_BUNDLE_DIR in place so
+	# assemble_app copies the linux versions into kimi-app/.
+	replace_daimon_runtimes "$(detect_arch)"
 
 	# Stage: assemble the runnable kimi-app/ (asar + electron + launcher).
 	assemble_app "$KIMI_INSTALL_DIR"

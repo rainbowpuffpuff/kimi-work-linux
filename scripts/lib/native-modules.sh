@@ -62,9 +62,11 @@ _npm_fetch() {
 }
 
 # Assert a file is a Linux ELF (catches stray darwin/win binaries early).
+# Resolves symlinks first (python-build-standalone ships bin/python3 → python3.12).
 _verify_elf() {
 	local f="$1" label="$2"
-	local ftype; ftype="$(file "$f")"
+	local real; real="$(readlink -f "$f" 2>/dev/null || echo "$f")"
+	local ftype; ftype="$(file "$real")"
 	case "$ftype" in
 		*ELF*) info "  prebuild is ELF ✓ ($label)" ;;
 		*) die "prebuild is NOT ELF ($label): $ftype" ;;
@@ -72,17 +74,23 @@ _verify_elf() {
 }
 
 # Drop an npm-fetched sibling package into a target node_modules dir.
-# Usage: _place_sibling <dest-node_modules> <pkg-name> <spec>
+# Copies the whole package (not just *.node — some packages ship .so/.dylib
+# loadable extensions instead, e.g. sqlite-vec). Usage: _place_sibling <nm> <pkg> <spec>
 _place_sibling() {
 	local dest_nm="$1" pkg="$2" spec="$3"
 	info "fetching $spec..."
 	local staged; staged="$(_npm_fetch "$spec")"
-	local node_file; node_file="$(find "$staged" -name '*.node' | head -n1)"
-	[ -n "$node_file" ] || die "no .node in $spec"
-	_verify_elf "$node_file" "$spec"
+	# Find any native binary: prefer *.node, else *.so*, else *.dylib*.
+	# (.so may carry a version suffix, e.g. libvips-cpp.so.8.18.3; same for dylib.)
+	local bin_file
+	bin_file="$(find "$staged" -name '*.node' 2>/dev/null | head -n1)"
+	[ -n "$bin_file" ] || bin_file="$(find "$staged" -name '*.so' -o -name '*.so.*' 2>/dev/null | head -n1)"
+	[ -n "$bin_file" ] || bin_file="$(find "$staged" -name '*.dylib' -o -name '*.dylib.*' 2>/dev/null | head -n1)"
+	[ -n "$bin_file" ] || die "no native binary (.node/.so/.dylib) in $spec"
+	_verify_elf "$bin_file" "$spec"
 	rm -rf "$dest_nm/$pkg" && mkdir -p "$dest_nm/$pkg"
 	cp -a "$staged/." "$dest_nm/$pkg/"
-	info "  placed $pkg ✓"
+	info "  placed $pkg ✓ ($(basename "$bin_file"))"
 }
 
 # Swap darwin native prebuilds for Linux equivalents in BOTH node_modules trees.
@@ -133,6 +141,11 @@ install_linux_prebuilds() {
 		if [ -d "$gw_nm/@img/sharp" ] || [ -d "$gw_nm/sharp" ]; then
 			_place_sibling "$gw_nm" "@img/sharp-linux-${arch_s}" \
 				"@img/sharp-linux-${arch_s}"
+		fi
+		# sharp's native dependency libvips is a SEPARATE platform package.
+		if [ -d "$gw_nm/@img/sharp-libvips-darwin-arm64" ] || [ -d "$gw_nm/@img/sharp" ]; then
+			_place_sibling "$gw_nm" "@img/sharp-libvips-linux-${arch_s}" \
+				"@img/sharp-libvips-linux-${arch_s}"
 		fi
 		# sqlite-vec: vector-search SQLite extension used by the agent memory.
 		if [ -d "$gw_nm/sqlite-vec" ]; then
