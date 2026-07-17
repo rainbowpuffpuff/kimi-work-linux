@@ -8,12 +8,19 @@ Moonshot AI ships official Kimi Work installers for macOS and Windows only.
 This project fills in Linux by converting the upstream macOS `kimi_<ver>.dmg`
 into a runnable Linux Electron app and packaging it as a `.deb` / `AppImage`.
 
+> **Fork note (omdano):** this fork adds **working Kimi WebBridge browser
+> automation** (via Moonshot's official, but unadvertised, Linux webbridge
+> daemon), support for the **≥3.1 installer-wrapped DMG layout**, a strip of
+> the macOS xattr shadow files that broke the daimon runtime, rootless
+> **AppImage installs**, and a **weekly systemd auto-updater**. Verified
+> end-to-end on Kimi Work **3.1.1** (Bazzite 44, KDE/Wayland): GUI launches,
+> login + membership sync work, the daimon reaches `ready`, all gateway
+> plugins install, and the webbridge daemon answers on `127.0.0.1:10086`.
+
 > **Status:** the conversion pipeline, `.deb`/`AppImage` packaging, and a
 > one-command installer are implemented and **verified end-to-end against the
-> real Kimi Work 3.0.22 DMG** (0 Mach-O binaries remain; every native
-> component is replaced with a Linux ELF). See [Verified below](#verified).
-> A display was not available in the build environment, so final GUI launch
-> testing is left to the user.
+> real Kimi Work 3.0.22 DMG** upstream, and against **3.1.1** in this fork
+> (see [Verified below](#verified)).
 
 ## ⚠️ Disclaimer
 
@@ -40,25 +47,33 @@ conversion handles all of them:
    (`appsupport.moonshot.cn/api/app/pkg/latest/macos/download` → `kimi_<ver>.dmg`).
 2. **Fetch** the upstream macOS DMG (cached by HTTP fingerprint, resumable).
 3. **Extract** the `.app` bundle with `7zz` (modern 7-Zip; old `p7zip` cannot
-   open current APFS DMGs).
+   open current APFS DMGs). Handles the ≥3.1 layout where the real app is
+   nested inside `Kimi Installer.app/Contents/Helpers/Kimi.app`, and strips
+   the macOS xattr shadow files (`*:com.apple.*`, ~84k of them) that 7z
+   extracts — they otherwise double directory entry counts and break the
+   daimon's runtime-resource preflight (`provision-failed`).
 4. **Inspect** `app.asar` to discover native modules, the Electron version,
    integrity checks, and the bundle layout → `inspect-report.json`.
 5. **Swap** every darwin native for its Linux equivalent across **four**
    component trees (see table below), all N-API / prebuild-based → no rebuild.
 6. **Replace** the darwin-bundled Python, uv, and Node runtimes with their
    Linux builds (same upstream release tags).
-7. **Strip** macOS-only leftovers (`fsevents`, `@esbuild/darwin-*`, symlinks,
+7. **Replace** the darwin `kimi-webbridge` Mach-O with Moonshot's **official
+   Linux daemon** from `cdn.kimi.com/webbridge` (same version lineage; the
+   Electron main process spawns `resources/kimi-webbridge start --foreground`
+   unconditionally at boot, with no platform or signature checks).
+8. **Strip** macOS-only leftovers (`fsevents`, `@esbuild/darwin-*`, symlinks,
    the conpty `spawn-helper`, …).
-8. **Repack** `app.asar` deterministically, with native binaries unpacked
+9. **Repack** `app.asar` deterministically, with native binaries unpacked
    beside the asar (Electron cannot `require()` from inside).
-9. **Download** the matching Linux Electron runtime.
-10. **Assemble** `kimi-app/` (Electron + repacked asar + launcher + icon) and
+10. **Download** the matching Linux Electron runtime.
+11. **Assemble** `kimi-app/` (Electron + repacked asar + launcher + icon) and
     generate `start.sh`.
-11. **Package** as `.deb` / `AppImage`.
+12. **Package** as `.deb` / `AppImage`.
 
 ### Verified
 
-End-to-end run against **Kimi Work 3.0.22** (macOS arm64 DMG → Linux x64):
+End-to-end run against **Kimi Work 3.0.22** (macOS arm64 DMG → Linux x64, upstream):
 
 | Check | Result |
 | --- | --- |
@@ -67,6 +82,16 @@ End-to-end run against **Kimi Work 3.0.22** (macOS arm64 DMG → Linux x64):
 | **Mach-O binaries remaining** | **✅ 0** |
 | Native binaries (Linux ELF) | ✅ 22 — all ELF-verified |
 | `.deb` build | ✅ `kimi-work_3.0.22-klinux1_amd64.deb` (596 MB) |
+
+End-to-end run against **Kimi Work 3.1.1** (this fork, Bazzite 44 / KDE Wayland):
+
+| Check | Result |
+| --- | --- |
+| DMG layout | ✅ installer-wrapped `Kimi.app` located + extracted |
+| GUI launch | ✅ window renders; login + membership sync OK |
+| daimon agent runtime | ✅ provision → spawn → `ready` (ws control on 127.0.0.1) |
+| Gateway plugins | ✅ 8/8 installed (incl. `kimi-webbridge`) |
+| WebBridge daemon | ✅ official Linux build spawned by the app itself; `curl 127.0.0.1:10086/status` → `{"running":true,"version":"v1.11.3"}` |
 
 The four component trees and their darwin → Linux swaps:
 
@@ -86,7 +111,7 @@ The four component trees and their darwin → Linux swaps:
 | **bundled runtimes** | Python 3.12 (cpython, darwin) | python-build-standalone, same release tag (linux) |
 | | uv (darwin) | astral-sh/uv (linux) |
 | | Node v24.15.0 (darwin) | nodejs.org (linux) |
-| | `kimi-webbridge` (darwin Mach-O) | no-op stub (no linux build; disabled upstream) |
+| | `kimi-webbridge` (darwin Mach-O) | official Linux daemon (`cdn.kimi.com/webbridge`) |
 
 ## Prerequisites
 
@@ -95,7 +120,7 @@ The four component trees and their darwin → Linux swaps:
 - `curl`, `python3`, `unzip`, `make`
 - Modern **7-Zip** (`7zz` ≥ 23.x). The ancient `p7zip` 16.02 cannot extract
   current DMGs — `make install-deps` bootstraps a modern `7zz` if needed.
-- `dpkg-deb` (for `.deb`), `appimagetool` (for AppImage)
+- `dpkg-deb` (for `.deb`), `appimagetool` (for AppImage — auto-downloaded)
 - A C++ toolchain (`build-essential`) — only needed if a native rebuild is
   required (the default path uses prebuilds, no rebuild).
 - Node.js / npm — used at build time for `asar` / `prebuild-install`. The
@@ -109,7 +134,7 @@ Clone, then run `make bootstrap` — it installs or updates to the latest
 upstream version:
 
 ```bash
-git clone https://github.com/<you>/kimi-work-linux.git
+git clone https://github.com/omdano/kimi-work-linux.git
 cd kimi-work-linux
 make bootstrap            # deps → fetch latest DMG → build → package → install
 ```
@@ -130,6 +155,49 @@ make deb                  # build a .deb into dist/
 make appimage             # build an AppImage into dist/
 ```
 
+Rootless AppImage install + auto-updates (recommended on atomic distros such
+as Bazzite / Silverblue, where `.deb` doesn't apply):
+
+```bash
+make appimage-install     # ~/Applications/KimiWork.AppImage + menu entry (no root)
+make install-updater      # weekly systemd --user timer (see below)
+```
+
+## Auto-updates (AppImage path)
+
+`make install-updater` installs `kimi-work-update.timer`, a weekly systemd
+**user** timer (no root, `Persistent=true`, randomized ≤1h delay) that runs
+`scripts/auto-update.sh`. Each run:
+
+1. Reads the latest upstream version from Moonshot's redirect endpoint.
+2. Compares it with the installed version tracked in
+   `~/.local/state/kimi-work-linux/version`.
+3. If newer: fast-forwards this repo (when clean), rebuilds from the latest
+   DMG, rebuilds the AppImage, and reinstalls `~/Applications/KimiWork.AppImage`
+   (stable path — shortcuts never break). Skips the run while the app is
+   running. Logs to `~/.local/state/kimi-work-linux/update.log` and sends a
+   desktop notification on success.
+
+Manage it with `make uninstall-updater`, or run a check by hand:
+`bash scripts/auto-update.sh` (`--force` to rebuild regardless).
+Do **not** use the app's built-in updater — it only serves Windows/macOS
+payloads.
+
+## WebBridge (browser automation) on Linux
+
+Browser automation works on Linux out of the box with this fork. The Electron
+main process spawns `resources/kimi-webbridge start --foreground` at every
+boot with no platform or signature checks, and this fork swaps in Moonshot's
+official Linux daemon (same `v1.x` lineage as the bundled macOS one).
+
+The daemon alone is not enough — on **every** platform it drives your browser
+through the **Kimi WebBridge browser extension**:
+
+1. Install the extension in Chrome/Edge (the app links to
+   `kimi.com/features/webbridge`, or search the Chrome Web Store).
+2. Verify: `curl -s 127.0.0.1:10086/status` should report
+   `"extension_connected":true`.
+
 ## Configuration (environment variables)
 
 | Variable | Default | Purpose |
@@ -139,6 +207,8 @@ make appimage             # build an AppImage into dist/
 | `KIMI_VERSION` | auto-detected from the redirect's `Location` | Pin an upstream version (e.g. `3.0.22`) |
 | `KIMI_INSTALL_DIR` | `./kimi-app` | Where the runnable app is generated |
 | `KIMI_ELECTRON_VERSION` | from `inspect-report.json` / Info.plist | Pin the Electron runtime version |
+| `KIMI_WEBBRIDGE_VERSION` | `latest` | Pin the webbridge daemon version (e.g. `v1.11.3`) |
+| `KIMI_APPIMAGE_DIR` | `~/Applications` | Where `install-appimage.sh` puts the AppImage |
 | `ELECTRON_MIRROR` | GitHub releases | Mirror root for the Linux Electron download |
 
 ## Project structure
@@ -151,14 +221,17 @@ scripts/
   install-latest.sh      # one-command install / update (latest version detection)
   build-deb.sh           # .deb packaging
   build-appimage.sh      # AppImage packaging
+  install-appimage.sh    # rootless AppImage install (~/Applications + .desktop)
+  auto-update.sh         # weekly updater driver (version check → rebuild → install)
   lib/                   # pipeline stages:
     install-helpers.sh     arch/distro detection, deps + modern 7zz check
-    dmg.sh                 redirect-based version detection + fingerprint-cached download
+    dmg.sh                 redirect-based version detection + fingerprint-cached download;
+                           ≥3.1 installer-app handling + macOS xattr shadow strip
     inspect.sh             asar analyzer → inspect-report.json
     asar.sh                extract / strip darwin artifacts / deterministic repack
     native-modules.sh      Linux prebuild swap across all node_modules trees
     electron.sh            resolve + cache + extract matching Linux Electron runtime
-    runtimes.sh            replace darwin Python/uv/Node + neutralize webbridge
+    runtimes.sh            replace darwin Python/uv/Node + official Linux webbridge
     assemble.sh            wire repacked asar + electron + launcher → kimi-app/
     package-common.sh      shared .deb/AppImage staging
     patches.sh             asar patch engine driver
@@ -168,21 +241,19 @@ launcher/
 packaging/
   linux/                 # .deb control + desktop entry
   appimage/              # AppRun + runtime
+  systemd/               # kimi-work-update.{service.in,timer} for auto-updates
 ```
 
 ## Known limitations
 
-- **GUI launch untested here** — the build environment has no display; run
-  `./kimi-app/start.sh` or `make run-app` to confirm.
-- **`kimi-webbridge` (browser automation) is unavailable** — it is a
-  darwin-only Mach-O with no known Linux build. It is replaced with a no-op
-  stub. Upstream `bundle.json` defaults it to disabled, so most flows are
-  unaffected.
-- **Auto-updater is not patched** — Kimi runs `electron-updater` against
-  `https://kimi-img.moonshot.cn/app/upgrade/`, which would push a macOS
-  payload. Use `make bootstrap` to update instead of the in-app updater. A
-  `disable-auto-update` patch descriptor is a known candidate (see
-  `scripts/patches/core/README.md`).
+- **GUI launch on 3.0.22 was untested upstream** — 3.1.1 is verified on this
+  fork (see [Verified](#verified)); other distros/versions may still surprise.
+- **Auto-updater inside the app is not patched** — Kimi runs
+  `electron-updater` against `https://kimi-img.moonshot.cn/app/upgrade/`,
+  which only serves Windows/macOS payloads. Use `make bootstrap` or the
+  weekly systemd updater above instead.
+- The daemon's port cleanup uses `lsof` and the skill deploy uses `tar`;
+  both are standard on desktop Linux, and failures there are non-fatal.
 
 ## Acknowledgments
 
@@ -192,6 +263,8 @@ The architecture is directly inspired by — and borrows design patterns from:
   same conversion approach for Z.ai's ZCode desktop app.
 - [`ilysenko/codex-desktop-linux`](https://github.com/ilysenko/codex-desktop-linux)
   — the original approach for OpenAI Codex Desktop.
+
+This fork is based on [`robustonian/kimi-work-linux`](https://github.com/robustonian/kimi-work-linux).
 
 ## License
 

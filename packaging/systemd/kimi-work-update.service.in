@@ -1,0 +1,6 @@
+[Unit]
+Description=Kimi Work (unofficial Linux build) update check
+
+[Service]
+Type=oneshot
+ExecStart=@REPO_DIR@/scripts/auto-update.sh --quiet

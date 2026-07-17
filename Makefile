@@ -12,7 +12,7 @@ DMG ?=
 .DEFAULT_GOAL := help
 
 .PHONY: help bootstrap install-deps fetch extract inspect build-app build-app-fresh \
-        package deb appimage install run-app clean
+        package deb appimage appimage-install install-updater uninstall-updater install run-app clean
 
 help: ## Show this help
 	@awk 'BEGIN { \
@@ -48,6 +48,23 @@ deb: ## Build a .deb into dist/
 
 appimage: ## Build an AppImage into dist/
 	@bash scripts/build-appimage.sh
+
+appimage-install: ## Install newest AppImage user-locally (~/Applications, no root)
+	@bash scripts/install-appimage.sh
+
+install-updater: ## Install weekly systemd --user auto-update timer
+	@mkdir -p "$(HOME)/.config/systemd/user"
+	@sed 's|@REPO_DIR@|$(CURDIR)|g' packaging/systemd/kimi-work-update.service.in > "$(HOME)/.config/systemd/user/kimi-work-update.service"
+	@cp packaging/systemd/kimi-work-update.timer "$(HOME)/.config/systemd/user/"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now kimi-work-update.timer
+	@echo "updater installed — check: systemctl --user list-timers kimi-work-update.timer"
+
+uninstall-updater: ## Remove the auto-update timer
+	@systemctl --user disable --now kimi-work-update.timer 2>/dev/null || true
+	@rm -f "$(HOME)/.config/systemd/user/kimi-work-update.service" "$(HOME)/.config/systemd/user/kimi-work-update.timer"
+	@systemctl --user daemon-reload
+	@echo "updater removed."
 
 install: ## Install the latest package from dist/ (needs sudo)
 	@if [ -f "$(DIST_DIR)/$(PACKAGE_NAME)_*.deb" ]; then \

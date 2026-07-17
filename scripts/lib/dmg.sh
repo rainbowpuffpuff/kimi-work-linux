@@ -155,8 +155,27 @@ extract_dmg() {
 		die "7zz extraction failed (exit $rc)"
 	fi
 
-	APP_BUNDLE_DIR="$(find "$extract_dir" -maxdepth 4 -name "*.app" -type d 2>/dev/null | head -n1)"
-	[ -n "$APP_BUNDLE_DIR" ] || die "no .app bundle found in DMG (extract dir: $extract_dir; 7zz exit $rc)"
+	# Upstream ≥3.1 wraps the real app inside an installer stub:
+	#   Kimi Installer.app/Contents/Helpers/Kimi.app
+	# The installer has no app.asar, so pick the .app that actually ships one.
+	local candidate
+	while IFS= read -r candidate; do
+		if [ -f "$candidate/Contents/Resources/app.asar" ]; then
+			APP_BUNDLE_DIR="$candidate"
+			break
+		fi
+	done < <(find "$extract_dir" -name "*.app" -type d 2>/dev/null)
+	# Fallback for older flat DMG layouts.
+	[ -n "${APP_BUNDLE_DIR:-}" ] || APP_BUNDLE_DIR="$(find "$extract_dir" -maxdepth 4 -name "*.app" -type d 2>/dev/null | head -n1)"
+	[ -n "${APP_BUNDLE_DIR:-}" ] || die "no .app bundle found in DMG (extract dir: $extract_dir; 7zz exit $rc)"
+
+	# 7z extracts macOS xattrs/resource forks as `<name>:com.apple.*` shadow
+	# files (~84k of them in 3.1.1). They double directory entry counts and
+	# break the daimon's runtime-resource preflight ("opaque 输出应有 15 个，
+	# 实际 30 个" → provision-failed). Strip them, plus .DS_Store.
+	find "$APP_BUNDLE_DIR" -type f -name "*:com.apple.*" -delete 2>/dev/null || true
+	find "$APP_BUNDLE_DIR" -name ".DS_Store" -delete 2>/dev/null || true
+
 	info "app bundle: $APP_BUNDLE_DIR"
 	export APP_BUNDLE_DIR
 }

@@ -5,7 +5,7 @@
 
 PACKAGE_NAME="${PACKAGE_NAME:-kimi-work}"
 
-# Resolve a package version: explicit env > inspect-report.json > KIMI_VERSION > fallback.
+# Resolve a package version: explicit env > inspect-report.json > built app > KIMI_VERSION > fallback.
 resolve_package_version() {
 	if [ -n "${PACKAGE_VERSION:-}" ]; then return; fi
 	local report="$SCRIPT_DIR/inspect-report.json"
@@ -13,6 +13,16 @@ resolve_package_version() {
 		local v
 		v="$(python3 -c "import json;print(json.load(open('$report'))['package_json']['version'])" 2>/dev/null || true)"
 		PACKAGE_VERSION="${v:+${v}-klinux1}"
+	fi
+	# The built kimi-app keeps app.asar as an unpacked real dir, so its
+	# package.json is directly readable — handy when `make inspect` never ran.
+	if [ -z "${PACKAGE_VERSION:-}" ]; then
+		local pj="$SCRIPT_DIR/kimi-app/electron/resources/app.asar/package.json"
+		if [ -f "$pj" ]; then
+			local v2
+			v2="$(python3 -c "import json;print(json.load(open('$pj'))['version'])" 2>/dev/null || true)"
+			PACKAGE_VERSION="${v2:+${v2}-klinux1}"
+		fi
 	fi
 	if [ -z "${PACKAGE_VERSION:-}" ] && [ -n "${KIMI_VERSION:-}" ]; then
 		PACKAGE_VERSION="${KIMI_VERSION}-klinux1"

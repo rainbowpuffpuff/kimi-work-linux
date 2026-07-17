@@ -128,24 +128,49 @@ _replace_daimon_uv() {
 	info "  placed daimon uv → $uv_dest ✓"
 }
 
-# kimi-webbridge is a darwin standalone Mach-O (no known linux build).
-# bundle.json defaults it to disabled (includesWebBridge:false,
-# webBridge.setupMode:"skip"), so we neutralize the binary so it can't be
-# exec'd by mistake, and document that the feature is unavailable on Linux.
-_neutralize_webbridge() {
+# kimi-webbridge is a standalone Go daemon (loopback HTTP on 127.0.0.1:10086)
+# that the Electron main process spawns unconditionally at every boot:
+#   <resources>/kimi-webbridge start --foreground
+# There are NO platform or signature checks on that path (verified in
+# app.asar main/index.js, 3.1.1), so the darwin Mach-O can simply be replaced
+# with Moonshot's official Linux build from their CDN — same version lineage
+# as the bundled darwin binary. The only remaining piece is the browser
+# extension, which users install in Chrome/Edge themselves.
+# (daimon-bundle/bundle.json's includesWebBridge:false / setupMode:"skip" only
+# means the daimon doesn't manage webbridge — it is NOT disabled app-wide.)
+_replace_webbridge_linux() {
 	local wb="${APP_BUNDLE_DIR:-}/Contents/Resources/resources/kimi-webbridge"
 	[ -f "$wb" ] || return 0
-	info "neutralizing darwin kimi-webbridge (no linux build; disabled upstream)"
-	# Replace the Mach-O with a stub that exits cleanly so any caller that
-	# shells out to it doesn't get a 'exec format error'.
-	cat > "$wb" <<'STUB'
-#!/usr/bin/env sh
-# kimi-webbridge is not available on this unofficial Linux build.
-# (darwin-only binary; upstream bundle.json disables it by default.)
-echo "kimi-work-linux: kimi-webbridge is not supported on Linux." >&2
-exit 0
-STUB
+
+	local arch="${1:-$(detect_arch)}"
+	local cdn_arch; cdn_arch="$(case "$arch" in
+		x64) echo "amd64" ;;
+		arm64) echo "arm64" ;;
+		*) die "no webbridge build for $arch" ;;
+	esac)"
+	local version="${KIMI_WEBBRIDGE_VERSION:-latest}"
+	local url="https://cdn.kimi.com/webbridge/${version}/releases/kimi-webbridge-linux-${cdn_arch}"
+	info "replacing darwin kimi-webbridge → official linux build (${version}, linux-${cdn_arch})"
+	info "  $url"
+
+	mkdir -p "$RUNTIME_CACHE_DIR"
+	local tmp="$RUNTIME_CACHE_DIR/kimi-webbridge-linux-${cdn_arch}-${version}"
+	# Pinned versions are cached; "latest" is always re-fetched (the daemon
+	# tracks the auto-updating browser extension's release line; ~10 MB).
+	if [ "$version" = "latest" ] || [ ! -f "$tmp" ]; then
+		if curl -fL --retry 3 -C - -o "$tmp.part" -- "$url"; then
+			mv "$tmp.part" "$tmp"
+		else
+			rm -f "$tmp.part"
+			[ -f "$tmp" ] || { warn "webbridge download failed; browser automation unavailable"; return 0; }
+			warn "webbridge download failed; using cached copy"
+		fi
+	fi
+
+	_verify_elf "$tmp" "kimi-webbridge"
+	cp "$tmp" "$wb"
 	chmod +x "$wb"
+	info "  placed kimi-webbridge (linux-${cdn_arch}) → $wb ✓"
 }
 
 # The bundle ships its own Node.js at resources/runtime/node (darwin-arm64).
@@ -198,5 +223,5 @@ replace_daimon_runtimes() {
 	_replace_daimon_python "$arch"
 	_replace_daimon_uv "$arch"
 	_replace_bundled_node "$arch"
-	_neutralize_webbridge
+	_replace_webbridge_linux "$arch"
 }
