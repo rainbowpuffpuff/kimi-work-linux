@@ -306,7 +306,8 @@ The architecture is directly inspired by — and borrows design patterns from:
 - [`ilysenko/codex-desktop-linux`](https://github.com/ilysenko/codex-desktop-linux)
   — the original approach for OpenAI Codex Desktop.
 
-This fork is based on [`robustonian/kimi-work-linux`](https://github.com/robustonian/kimi-work-linux).
+This fork is based on [`omdano/kimi-work-linux`](https://github.com/omdano/kimi-work-linux)
+(which itself is based on [`robustonian/kimi-work-linux`](https://github.com/robustonian/kimi-work-linux)).
 
 ## License
 
