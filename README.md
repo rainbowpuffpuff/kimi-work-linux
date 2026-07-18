@@ -17,6 +17,13 @@ into a runnable Linux Electron app and packaging it as a `.deb` / `AppImage`.
 > login + membership sync work, the daimon reaches `ready`, all gateway
 > plugins install, and the webbridge daemon answers on `127.0.0.1:10086`.
 
+> **Fork note (rainbowpuffpuff):** on top of omdano, this fork adds **Linux
+> deep-link routing** (`kimi://` / `kimi-work://` from Chat webview +
+> `.desktop` handlers + AppImage cold-start) so Invite / “open in Work”
+> actually opens the local app. **Partial fix only** — claim / invite-to-earn
+> / draw rewards still often do not complete after handoff; see
+> [Deep links (partial fix)](#deep-links-partial-fix).
+
 > **Status:** the conversion pipeline, `.deb`/`AppImage` packaging, and a
 > one-command installer are implemented and **verified end-to-end against the
 > real Kimi Work 3.0.22 DMG** upstream, and against **3.1.1** in this fork
@@ -254,6 +261,41 @@ packaging/
   weekly systemd updater above instead.
 - The daemon's port cleanup uses `lsof` and the skill deploy uses `tar`;
   both are standard on desktop Linux, and failures there are non-fatal.
+- **Deep links open Work, but invite / claim / “draw” rewards may still not
+  complete** — see [Deep links (partial fix)](#deep-links-partial-fix).
+
+## Deep links (partial fix)
+
+This tree applies `scripts/patches/core/linux-deeplink/` at build time and
+registers both `kimi-work://` and `kimi://` on the `.desktop` entry so the
+Chat webview no longer drops in-app deep links.
+
+**What works**
+
+- Invite / “open in Work app” no longer dies with “No Apps Available”.
+- `xdg-open 'kimi-work://home'` and in-app `kimi://action/…` focus the
+  desktop shell and open the Work surface (logged as
+  `handleDeepLink protocol=…` in `~/.config/kimi-desktop/logs/main.log`).
+
+**What still does not work (open bug)**
+
+- Opening the local Work app this way does **not** fully deliver
+  invite-to-earn / claim / draw rewards the way the official macOS/Windows
+  app (or pure browser claim flow) does.
+- `kimi-work://` still mostly maps to `openPage()` (show Work tab). Query /
+  path payloads used for claim state are incomplete; rewards often do not
+  apply after the handoff.
+
+**Environment where this was observed**
+
+| Field | Value |
+| --- | --- |
+| OS | Fedora Linux 44 (Workstation Edition) |
+| Kernel | 7.1.3-200.fc44.x86_64 |
+| Arch | x86_64 |
+| Session | Wayland |
+| Hardware | Framework Laptop 16 (AMD Ryzen 7040 Series) |
+| Kimi Work | 3.1.2 (macOS arm64 DMG → Linux AppImage via this pipeline) |
 
 ## Acknowledgments
 
