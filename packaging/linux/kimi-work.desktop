@@ -11,3 +11,4 @@ Categories=Office;Utility;
 Terminal=false
 StartupNotify=true
 StartupWMClass=kimi-desktop
+MimeType=x-scheme-handler/kimi-work;x-scheme-handler/kimi;

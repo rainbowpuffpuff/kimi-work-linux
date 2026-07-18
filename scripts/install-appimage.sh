@@ -32,13 +32,19 @@ fi
 cat > "$HOME/.local/share/applications/kimi-work.desktop" <<EOF
 [Desktop Entry]
 Type=Application
+Version=1.0
 Name=Kimi Work
 Comment=Kimi Work (unofficial Linux build)
 Exec=$TARGET %U
 Icon=kimi-work
 Terminal=false
 Categories=Office;Utility;
+StartupNotify=true
+StartupWMClass=kimi-desktop
+MimeType=x-scheme-handler/kimi-work;x-scheme-handler/kimi;
 EOF
 update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+xdg-mime default kimi-work.desktop x-scheme-handler/kimi-work >/dev/null 2>&1 || true
+xdg-mime default kimi-work.desktop x-scheme-handler/kimi >/dev/null 2>&1 || true
 
 info "done — launch from your app menu or directly: $TARGET"
